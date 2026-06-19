@@ -1,1 +1,21 @@
-{"name":"slavx-render","version":"1.0.0","dependencies":{"@remotion/cli":"^4.0.436","react":"^18.0.0","react-dom":"^18.0.0","remotion":"^4.0.0"},"devDependencies":{"@types/react":"^18.0.0","typescript":"^5.0.0"}}
+{
+  "name": "slavx-render",
+  "version": "1.0.0",
+  "scripts": {
+    "web": "node server.js",
+    "studio": "remotion studio",
+    "render": "remotion render"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.436",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "remotion": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "typescript": "^5.0.0"
+  }
+}
