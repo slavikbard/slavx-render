@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ru" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>НОВОСТИ IL — Генератор контента</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;700&family=Roboto:wght@300;400;700;900&family=Montserrat:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="top-bar">
+    <div class="brand">НОВОСТИ <span class="accent">IL</span></div>
+    <div class="subtitle">Генератор контента для TikTok / Instagram</div>
+  </header>
+
+  <main class="container">
+
+    <!-- INPUT -->
+    <section class="input-section">
+      <h2 class="section-title">Введите новость на иврите</h2>
+
+      <div class="form-group">
+        <textarea
+          id="hebrewInput"
+          class="text-input hebrew-input"
+          rows="4"
+          placeholder="...הדביקו כאן את מבזק החדשות"
+          dir="rtl"
+        ></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Категория (необязательно):</label>
+        <div class="category-buttons">
+          <button class="cat-btn" data-cat="ПОЛИТИКА" onclick="selectCat(this)">ПОЛИТИКА</button>
+          <button class="cat-btn" data-cat="БЕЗОПАСНОСТЬ" onclick="selectCat(this)">БЕЗОПАСНОСТЬ</button>
+          <button class="cat-btn" data-cat="ЭКОНОМИКА" onclick="selectCat(this)">ЭКОНОМИКА</button>
+          <button class="cat-btn" data-cat="ОБЩЕСТВО" onclick="selectCat(this)">ОБЩЕСТВО</button>
+          <button class="cat-btn" data-cat="БЛИЖНИЙ ВОСТОК" onclick="selectCat(this)">БЛИЖНИЙ ВОСТОК</button>
+          <button class="cat-btn" data-cat="ТЕХНОЛОГИИ" onclick="selectCat(this)">ТЕХНОЛОГИИ</button>
+        </div>
+      </div>
+
+      <button class="generate-btn" id="generateBtn" onclick="generateNews()">
+        <span class="btn-text">ГЕНЕРИРОВАТЬ КОНТЕНТ</span>
+        <span class="btn-loading" style="display:none">ГЕНЕРАЦИЯ...</span>
+      </button>
+
+      <p class="error-msg" id="errorMsg" style="display:none"></p>
+    </section>
+
+    <!-- RESULTS -->
+    <section class="results-section" id="resultsSection" style="display:none">
+
+      <!-- Headline -->
+      <div class="result-card headline-card">
+        <div class="card-header">
+          <span class="card-badge" id="resCategoryBadge"></span>
+          <span class="card-date" id="resDate"></span>
+        </div>
+        <h1 class="res-headline" id="resHeadline"></h1>
+        <p class="res-subheadline" id="resSubheadline"></p>
+      </div>
+
+      <!-- Script lines -->
+      <div class="result-card">
+        <h3 class="card-title">Строки для видео</h3>
+        <ol class="body-lines" id="resBodyLines"></ol>
+      </div>
+
+      <!-- Commentary -->
+      <div class="result-card commentary-card">
+        <div class="quote-mark">&laquo;</div>
+        <p class="res-commentary" id="resCommentary"></p>
+        <span class="commentary-label">АНАЛИТИЧЕСКИЙ КОММЕНТАРИЙ</span>
+      </div>
+
+      <!-- TikTok Script -->
+      <div class="result-card">
+        <h3 class="card-title">Сценарий TikTok / Reels</h3>
+        <pre class="tiktok-script" id="resTiktokScript"></pre>
+        <button class="copy-btn" onclick="copyText('resTiktokScript', this)">Копировать сценарий</button>
+      </div>
+
+      <!-- Image Prompt -->
+      <div class="result-card">
+        <h3 class="card-title">Промпт для изображения (DALL-E / Midjourney)</h3>
+        <pre class="image-prompt" id="resImagePrompt"></pre>
+        <button class="copy-btn" onclick="copyText('resImagePrompt', this)">Копировать промпт</button>
+      </div>
+
+      <!-- JSON for Remotion -->
+      <div class="result-card">
+        <h3 class="card-title">JSON для Remotion (рендер видео)</h3>
+        <pre class="json-output" id="resJson"></pre>
+        <button class="copy-btn primary" onclick="copyText('resJson', this)">Копировать JSON</button>
+      </div>
+
+    </section>
+
+  </main>
+
+  <script>
+    let selectedCategory = null;
+
+    function selectCat(btn) {
+      document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+      if (selectedCategory === btn.dataset.cat) {
+        selectedCategory = null;
+      } else {
+        btn.classList.add('active');
+        selectedCategory = btn.dataset.cat;
+      }
+    }
+
+    async function generateNews() {
+      const input = document.getElementById('hebrewInput');
+      const text = input.value.trim();
+      const errorMsg = document.getElementById('errorMsg');
+      const btn = document.getElementById('generateBtn');
+
+      if (!text) {
+        errorMsg.textContent = 'Введите текст новости';
+        errorMsg.style.display = 'block';
+        input.focus();
+        return;
+      }
+
+      errorMsg.style.display = 'none';
+      btn.querySelector('.btn-text').style.display = 'none';
+      btn.querySelector('.btn-loading').style.display = 'inline';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch('/api/generate-news', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hebrewText: text, category: selectedCategory }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Server error');
+        }
+
+        const data = await res.json();
+        displayResults(data);
+      } catch (err) {
+        errorMsg.textContent = err.message;
+        errorMsg.style.display = 'block';
+      } finally {
+        btn.querySelector('.btn-text').style.display = 'inline';
+        btn.querySelector('.btn-loading').style.display = 'none';
+        btn.disabled = false;
+      }
+    }
+
+    function displayResults(data) {
+      document.getElementById('resCategoryBadge').textContent = data.category || '';
+      document.getElementById('resDate').textContent = data.sourceDate || '';
+      document.getElementById('resHeadline').textContent = data.headline || '';
+      document.getElementById('resSubheadline').textContent = data.subheadline || '';
+
+      const list = document.getElementById('resBodyLines');
+      list.innerHTML = '';
+      (data.bodyLines || []).forEach(line => {
+        const li = document.createElement('li');
+        li.textContent = line;
+        list.appendChild(li);
+      });
+
+      document.getElementById('resCommentary').textContent = data.commentaryLine || '';
+      document.getElementById('resTiktokScript').textContent = data.tiktokScript || '';
+      document.getElementById('resImagePrompt').textContent = data.imagePrompt || '';
+
+      const remotionJson = {
+        news: {
+          id: data.id,
+          headline: data.headline,
+          subheadline: data.subheadline,
+          bodyLines: data.bodyLines,
+          category: data.category,
+          sourceDate: data.sourceDate,
+          commentaryLine: data.commentaryLine,
+          imagePrompt: data.imagePrompt,
+          originalHebrew: data.originalHebrew,
+        },
+        brandName: 'НОВОСТИ IL',
+      };
+      document.getElementById('resJson').textContent = JSON.stringify(remotionJson, null, 2);
+
+      const results = document.getElementById('resultsSection');
+      results.style.display = 'block';
+      results.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function copyText(id, btn) {
+      const text = document.getElementById(id).textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = 'Скопировано!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+      });
+    }
+
+    document.getElementById('hebrewInput').addEventListener('input', function () {
+      document.getElementById('errorMsg').style.display = 'none';
+    });
+  </script>
+
+</body>
+</html>
