@@ -116,7 +116,7 @@
   </main>
 
   <script>
-    const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent';
+    const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
     let selectedCategory = null;
 
     // API Key management
@@ -225,21 +225,22 @@ ${categoryHint}
           headers: { 'Content-Type': 'application/json', 'X-goog-api-key': apiKey },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 2048, temperature: 0.7 },
+            generationConfig: { maxOutputTokens: 4096, temperature: 0.7, responseMimeType: 'application/json' },
           }),
         });
 
         if (!res.ok) {
           const errText = await res.text();
-          throw new Error(res.status === 400 ? 'Invalid API key' : 'Gemini API error: ' + res.status);
+          throw new Error('Gemini error ' + res.status + ': ' + errText.substring(0, 200));
         }
 
         const data = await res.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) throw new Error('Empty response');
+        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!rawText) throw new Error('Empty response from Gemini');
 
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error('Could not parse response');
+        const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+        const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error('Parse error. Raw: ' + rawText.substring(0, 150));
 
         displayResults(JSON.parse(jsonMatch[0]));
       } catch (err) {
