@@ -18,6 +18,18 @@
 
   <main class="container">
 
+    <!-- API KEY (saved in localStorage) -->
+    <section class="input-section" id="apiKeySection">
+      <div class="form-group">
+        <label class="form-label">Gemini API Key:</label>
+        <div style="display:flex;gap:8px">
+          <input type="password" id="apiKeyInput" class="text-input" placeholder="AIza..." style="font-size:14px;direction:ltr">
+          <button class="copy-btn primary" onclick="saveApiKey()" style="white-space:nowrap;padding:10px 16px">OK</button>
+        </div>
+        <p style="font-size:11px;color:var(--gray);margin-top:6px">Сохраняется локально в браузере</p>
+      </div>
+    </section>
+
     <!-- INPUT -->
     <section class="input-section">
       <h2 class="section-title">Введите новость на иврите</h2>
@@ -104,7 +116,27 @@
   </main>
 
   <script>
+    const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
     let selectedCategory = null;
+
+    // API Key management
+    const stored = localStorage.getItem('gemini_api_key');
+    if (stored) {
+      document.getElementById('apiKeyInput').value = stored;
+      document.getElementById('apiKeySection').style.display = 'none';
+    }
+
+    function saveApiKey() {
+      const key = document.getElementById('apiKeyInput').value.trim();
+      if (key) {
+        localStorage.setItem('gemini_api_key', key);
+        document.getElementById('apiKeySection').style.display = 'none';
+      }
+    }
+
+    function getApiKey() {
+      return localStorage.getItem('gemini_api_key') || document.getElementById('apiKeyInput').value.trim();
+    }
 
     function selectCat(btn) {
       document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
@@ -118,11 +150,20 @@
 
     async function generateNews() {
       const input = document.getElementById('hebrewInput');
-      const text = input.value.trim();
+      const hebrewText = input.value.trim();
       const errorMsg = document.getElementById('errorMsg');
       const btn = document.getElementById('generateBtn');
+      const apiKey = getApiKey();
 
-      if (!text) {
+      if (!apiKey) {
+        errorMsg.textContent = 'Введите Gemini API Key';
+        errorMsg.style.display = 'block';
+        document.getElementById('apiKeySection').style.display = 'block';
+        document.getElementById('apiKeyInput').focus();
+        return;
+      }
+
+      if (!hebrewText) {
         errorMsg.textContent = 'Введите текст новости';
         errorMsg.style.display = 'block';
         input.focus();
@@ -134,20 +175,73 @@
       btn.querySelector('.btn-loading').style.display = 'inline';
       btn.disabled = true;
 
+      const categoryHint = selectedCategory ? `\nПредпочтительная категория: ${selectedCategory}` : '';
+
+      const prompt = `Ты профессиональный русскоязычный новостной редактор медиа-издания для русскоязычной общины Израиля.
+Твоя редакционная позиция — правоцентристская/консервативная, произраильская, аналитически строгая.
+Тон — уверенный, профессиональный, не агрессивный. Ты обращаешься к русскоязычным израильтянам.
+
+Исходный текст новости на иврите:
+"${hebrewText}"
+${categoryHint}
+
+Создай JSON-объект со следующими полями:
+
+1. "id" — короткий kebab-case ID на основе темы (латиницей)
+2. "headline" — ёмкий заголовок на русском (макс. 60 символов). Прямой, активный залог.
+3. "subheadline" — одно предложение контекста на русском (макс. 100 символов).
+4. "bodyLines" — массив из 3-5 коротких предложений на русском (каждое макс. 80 символов).
+   Они будут появляться по одному в видео. Требования:
+   - Изложить основные факты чётко
+   - Включить релевантные цифры/имена
+   - Подходящий темп для TikTok (короткие, ударные фразы)
+5. "category" — одно из: "ПОЛИТИКА", "БЕЗОПАСНОСТЬ", "ЭКОНОМИКА", "ОБЩЕСТВО", "БЛИЖНИЙ ВОСТОК", "ТЕХНОЛОГИИ"
+6. "commentaryLine" — одно аналитическое предложение (макс. 120 символов) с правоцентристской израильской позицией:
+   - Поддерживает позиции безопасности и суверенитета Израиля
+   - Аналитический тон, не провокационный
+   - Обращается именно к русско-израильской аудитории
+   - Звучит как экспертный комментарий
+7. "imagePrompt" — промпт на АНГЛИЙСКОМ для генерации изображения (DALL-E/Midjourney).
+   Опиши фотожурналистскую сцену, соответствующую новости.
+   Включи: освещение, композицию, настроение. НЕ включай текст в изображение.
+   Стиль: "editorial photography, dramatic lighting, cinematic, 9:16 vertical aspect ratio"
+8. "sourceDate" — сегодняшняя дата в формате YYYY-MM-DD
+9. "originalHebrew" — верни исходный текст на иврите без изменений
+
+ТАКЖЕ создай поле:
+10. "tiktokScript" — полный сценарий для TikTok/Instagram Reels на русском.
+    Формат:
+    [ХУКЛАЙН] Первые 3 секунды — цепляющая фраза
+    [ОСНОВА] 3-5 предложений — суть новости
+    [КОММЕНТАРИЙ] 1 аналитическое предложение
+    [CTA] Призыв к действию (подписка, комментарий)
+    [ХЕШТЕГИ] 5-7 хештегов на русском
+
+Верни ТОЛЬКО валидный JSON без markdown-обёрток и пояснений.`;
+
       try {
-        const res = await fetch('/api/generate-news', {
+        const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ hebrewText: text, category: selectedCategory }),
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: 2048, temperature: 0.7 },
+          }),
         });
 
         if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || 'Server error');
+          const errText = await res.text();
+          throw new Error(res.status === 400 ? 'Invalid API key' : 'Gemini API error: ' + res.status);
         }
 
         const data = await res.json();
-        displayResults(data);
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) throw new Error('Empty response');
+
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error('Could not parse response');
+
+        displayResults(JSON.parse(jsonMatch[0]));
       } catch (err) {
         errorMsg.textContent = err.message;
         errorMsg.style.display = 'block';
@@ -178,15 +272,10 @@
 
       const remotionJson = {
         news: {
-          id: data.id,
-          headline: data.headline,
-          subheadline: data.subheadline,
-          bodyLines: data.bodyLines,
-          category: data.category,
-          sourceDate: data.sourceDate,
-          commentaryLine: data.commentaryLine,
-          imagePrompt: data.imagePrompt,
-          originalHebrew: data.originalHebrew,
+          id: data.id, headline: data.headline, subheadline: data.subheadline,
+          bodyLines: data.bodyLines, category: data.category,
+          sourceDate: data.sourceDate, commentaryLine: data.commentaryLine,
+          imagePrompt: data.imagePrompt, originalHebrew: data.originalHebrew,
         },
         brandName: 'НОВОСТИ IL',
       };
@@ -198,8 +287,7 @@
     }
 
     function copyText(id, btn) {
-      const text = document.getElementById(id).textContent;
-      navigator.clipboard.writeText(text).then(() => {
+      navigator.clipboard.writeText(document.getElementById(id).textContent).then(() => {
         const orig = btn.textContent;
         btn.textContent = 'Скопировано!';
         btn.classList.add('copied');
@@ -207,7 +295,7 @@
       });
     }
 
-    document.getElementById('hebrewInput').addEventListener('input', function () {
+    document.getElementById('hebrewInput').addEventListener('input', () => {
       document.getElementById('errorMsg').style.display = 'none';
     });
   </script>
